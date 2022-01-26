@@ -1,55 +1,86 @@
 <?php
-
-/**
- * @param string $customer_ids
- * @return array
- *
- * @throws Exception
- */
-function get_customers(string $customer_ids): array
+class DB
 {
-    if (!validateData($customer_ids)) {
-        throw new Exception('Validation error.');
+    private static $db;
+
+    public function __construct()
+    {
+        self::$db = new mysqli("localhost", "root", "root", "test");
+
+        if (!self::$db) {
+            throw new Exception('Database connection error.');
+        }
     }
 
-    if (!$db = new mysqli("localhost", "root", "root", "test")) {
-        throw new Exception('Database connection error.');
+    public function __destruct() {
+        mysqli_close(self::$db);
     }
 
-    $data = [];
-
-    $sql = "SELECT * FROM `customers` WHERE id IN (" . $customer_ids . ")";
-    $query = mysqli_query($db, $sql);
-
-    while ($obj = $query->fetch_object()) {
-        $data[$obj->id] = $obj->name;
+    public static function query($sql)
+    {
+        return mysqli_query(self::$db, $sql);
     }
-
-    mysqli_close($db);
-
-    return $data;
 }
 
-/**
- * @param string $data
- * @return bool
- */
-function validateData(string $data): bool
+class Validator
 {
-    foreach (explode(',', $data) as $id) {
-        if (is_numeric($id)) return true;
-    }
+    /**
+     * Валидация id из строки
+     *
+     * @param string $ids
+     * @return bool
+     */
+    public static function validateIds(string $ids): bool
+    {
+        if (strpos($ids, ',')) {
+            foreach (explode(',', $ids) as $id) {
+                if (!is_numeric($id)) {
+                    return false;
+                }
+            }
+        }
 
-    return false;
+        return true;
+    }
+}
+
+class Customer
+{
+    /**
+     * Получение все пользователей
+     *
+     * @param string $string
+     * @return array
+     *
+     * @throws Exception
+     */
+    public static function get(string $string): array
+    {
+        if (!Validator::validateIds($string)) {
+            throw new Exception('Validation error.');
+        }
+
+        $data = [];
+
+        $db = new DB();
+        $query = $db::query("SELECT * FROM `customers` WHERE id IN ($string)");
+
+        while ($obj = $query->fetch_object()) {
+            $data[$obj->id] = $obj->name;
+        }
+
+        return $data;
+    }
 }
 
 //пример строки которая приходит: http://www.site.com/?customer_ids=1,2,3,4,5
 
 try {
-    $data = get_customers($_GET['customer_ids']);
+    $_GET['customer_ids'] = "1,2,3,4,5";
+    $customers = Customer::get($_GET['customer_ids']);
 
-    foreach ($data as $customer_id => $customer_name) {
-        echo "<a href=\"/customer.php?id=$customer_id\">$customer_name</a>";
+    foreach ($customers as $id => $name) {
+        echo "<a href=\"/customer.php?id=$id\">$name</a>";
     }
 } catch (Exception $e) {
     echo $e->getMessage();
